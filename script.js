@@ -104,13 +104,12 @@ function setOriginalImage(img) {
     analyzeAndRecommend();
 }
 
-// ======================= تحميل الملفات المتقدمة (PSD محسن، RAW أفضل، PDF، TIFF) =======================
+// ======================= تحميل الملفات المتقدمة (PSD محسن، RAW أساسي، PDF، TIFF) =======================
 async function loadAdvancedFile(file) {
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext === 'psd') {
         try {
             const psd = await PSD.fromURL(URL.createObjectURL(file));
-            // دمج جميع الطبقات في صورة PNG واحدة
             const pngData = psd.image.toPng();
             const img = new Image();
             await new Promise((resolve) => { img.onload = resolve; img.src = pngData; });
@@ -120,17 +119,16 @@ async function loadAdvancedFile(file) {
             throw e;
         }
     } else if (ext === 'raw') {
+        // معالجة RAW بسيطة: عرض معاينة كصورة JPEG إن أمكن
         try {
-            // محاولة قراءة البيانات كصورة (معاينة أساسية)
-            const buffer = await file.arrayBuffer();
-            const blob = new Blob([buffer], {type: 'image/jpeg'});
+            const blob = new Blob([await file.arrayBuffer()], {type: 'image/jpeg'});
             const img = new Image();
             await new Promise((resolve, reject) => {
                 img.onload = resolve;
                 img.onerror = reject;
                 img.src = URL.createObjectURL(blob);
             });
-            statusSidebar.innerText = '⚠️ ملف RAW تم تحميله كمعاينة أساسية. قد لا تكون دقيقة 100%.';
+            statusSidebar.innerText = '⚠️ ملف RAW تم تحميله كمعاينة JPEG. قد لا تكون دقيقة 100%.';
             return img;
         } catch(e) {
             statusSidebar.innerText = '⚠️ فشل تحميل RAW. يرجى تحويل الملف إلى تنسيق آخر.';
@@ -205,7 +203,7 @@ function updateBatchList() {
     });
 }
 
-// ======================= وظائف تحسين الجودة =======================
+// ======================= وظائف تحسين الجودة (كما هي) =======================
 async function smartUpscale() {
     if (!currentImage) return;
     setProgress(30, 'تكبير ذكي ×2...');
