@@ -543,13 +543,13 @@ function toCMYK() {
     let outOfGamut = 0;
     for(let i=0;i<data.length;i+=4){
         let r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
+        const lab = chroma(data[i],data[i+1],data[i+2]).lab();
+        if(lab[0] < 0 || lab[0] > 100) outOfGamut++;
         let k = 1-Math.max(r,g,b);
         let c = (1-r-k)/(1-k)||0;
         let m = (1-g-k)/(1-k)||0;
         let y = (1-b-k)/(1-k)||0;
         data[i]=c*255; data[i+1]=m*255; data[i+2]=y*255; data[i+3]=k*255;
-        const lab = chroma(r,g,b).lab();
-        if(lab[0] < 0 || lab[0] > 100) outOfGamut++;
     }
     ctx.putImageData(imgData,0,0);
     const newImg = new Image();
@@ -625,9 +625,9 @@ async function splitIntoTiles() {
 
 async function exportTIFF() {
     const canvas = afterCanvas;
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-    const arr = await blob.arrayBuffer();
-    const tiff = UTIF.encodeImage({width:canvas.width, height:canvas.height, data:new Uint8Array(arr)}, canvas.width, canvas.height);
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const tiff = UTIF.encodeImage({width:canvas.width, height:canvas.height, data:new Uint8Array(imgData.data.buffer)}, canvas.width, canvas.height);
     saveAs(new Blob([tiff], {type:"image/tiff"}), 'print_ready.tiff');
 }
 function exportPDF() {
@@ -665,6 +665,7 @@ document.getElementById('applyEditorBtn').onclick = () => {
     let imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
     let data = imgData.data;
     const contrast = (document.getElementById('contrastSlider').value - 100) / 100;
+    const sharpness = (document.getElementById('sharpnessSlider').value - 100) / 100;
     const sat = document.getElementById('saturationSlider').value / 100;
     for(let i=0;i<data.length;i+=4){
         let r=data[i], g=data[i+1], b=data[i+2];
@@ -678,6 +679,30 @@ document.getElementById('applyEditorBtn').onclick = () => {
         data[i]=Math.min(255,Math.max(0,r));
         data[i+1]=Math.min(255,Math.max(0,g));
         data[i+2]=Math.min(255,Math.max(0,b));
+    }
+    if(sharpness !== 0) {
+        let width = canvas.width, height = canvas.height;
+        let srcData = new Uint8ClampedArray(data);
+        let blurred = new Uint8ClampedArray(data.length);
+        for (let y = 1; y < height-1; y++) {
+            for (let x = 1; x < width-1; x++) {
+                let r=0,g=0,b=0,cnt=0;
+                for (let dy=-1; dy<=1; dy++) {
+                    for (let dx=-1; dx<=1; dx++) {
+                        let idx = ((y+dy)*width + (x+dx))*4;
+                        r+=srcData[idx]; g+=srcData[idx+1]; b+=srcData[idx+2]; cnt++;
+                    }
+                }
+                let idxOut = (y*width + x)*4;
+                blurred[idxOut]=r/cnt; blurred[idxOut+1]=g/cnt; blurred[idxOut+2]=b/cnt;
+            }
+        }
+        let amount = sharpness * 2;
+        for (let i=0; i<data.length; i+=4) {
+            data[i] = Math.min(255, Math.max(0, srcData[i] + amount * (srcData[i] - blurred[i])));
+            data[i+1] = Math.min(255, Math.max(0, srcData[i+1] + amount * (srcData[i+1] - blurred[i+1])));
+            data[i+2] = Math.min(255, Math.max(0, srcData[i+2] + amount * (srcData[i+2] - blurred[i+2])));
+        }
     }
     ctx.putImageData(imgData,0,0);
     const newImg = new Image();
