@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>PrintMaster Pro - الطباعة العملاقة</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <!-- المكتبات -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pica/9.0.1/pica.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/psd.js@3.4.0/dist/psd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/potrace-plus@latest/dist/potrace-plus.min.js"></script>
+    <!-- مكتبة إضافية لتحسين RAW -->
+    <script src="https://cdn.jsdelivr.net/npm/raw-loader@0.5.1/dist/raw-loader.min.js"></script>
+</head>
+<body>
+    <!-- شاشة القفل -->
+    <div id="lockScreen" class="lock-screen">
+        <div class="lock-card">
+            <h2>🔒 تطبيق محمي</h2>
+            <p>يرجى إدخال كلمة المرور للدخول</p>
+            <input type="password" id="passwordInput" placeholder="كلمة المرور" autocomplete="off">
+            <button id="unlockBtn" class="btn-primary">فتح التطبيق</button>
+            <div id="lockError" class="error-msg"></div>
+            <div id="expiryInfo" class="expiry-info"></div>
+        </div>
+    </div>
+
+    <!-- واجهة التطبيق -->
+    <div id="appContainer" class="app-container" style="display: none;">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3>🖨️ PrintMaster Pro Ultimate</h3>
+                <button id="toggleSidebarBtn" class="icon-btn">◀</button>
+            </div>
+            <div class="sidebar-content">
+                <div class="theme-switch">
+                    <span>🌙 الوضع المظلم</span>
+                    <label class="switch"><input type="checkbox" id="darkModeToggle"><span class="slider round"></span></label>
+                </div>
+                <div class="upload-area-drop" id="dropZone">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16v-6m0 0-2 2m2-2 2 2M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M12 10V4M8 8l4-4 4 4"/></svg>
+                    <p>اسحب وأفلت الصور، PDF، PSD، RAW، TIFF</p>
+                    <button id="batchUploadBtn" class="btn-primary">📁 رفع ملفات متعددة</button>
+                    <input type="file" id="batchFileInput" multiple accept="image/*,application/pdf,.psd,.raw,.tiff" style="display:none">
+                </div>
+                <div class="batch-list" id="batchList"></div>
+
+                <div class="param-group">
+                    <h3>🎛️ محرر مرئي (فوري)</h3>
+                    <label>التباين: <input type="range" id="contrastSlider" min="0" max="200" value="100"></label>
+                    <label>الحدة: <input type="range" id="sharpnessSlider" min="0" max="200" value="100"></label>
+                    <label>التشبع: <input type="range" id="saturationSlider" min="0" max="200" value="100"></label>
+                    <button id="applyEditorBtn" class="btn-primary">تطبيق التعديلات</button>
+                </div>
+
+                <div class="param-group">
+                    <h3>🚀 رفع الدقة إلى UHD / 4K / 8K</h3>
+                    <div class="flex-row"><label>العرض المستهدف (px):</label><input type="number" id="targetWidth" value="3840"></div>
+                    <div class="flex-row"><label>الارتفاع المستهدف (px):</label><input type="number" id="targetHeight" value="2160"></div>
+                    <button id="upscaleToUHDBtn" class="btn-primary">📺 رفع الدقة (مع تحسين الحدة)</button>
+                </div>
+
+                <div class="param-group">
+                    <h3>📐 إعدادات الطباعة</h3>
+                    <label>DPI النهائي: <input type="number" id="targetDPI" value="150"></label>
+                    <label>عرض البنر (سم): <input type="number" id="bannerWidthCm" value="500"></label>
+                    <label>ارتفاع البنر (سم): <input type="number" id="bannerHeightCm" value="200"></label>
+                    <button id="analyzeQualityBtn" class="btn-secondary">📊 تحليل الجودة</button>
+                    <div id="qualityReport" class="quality-badge"></div>
+                </div>
+
+                <div class="param-group">
+                    <h3>✂️ تقسيم وتجميع البنر</h3>
+                    <label>حجم القطعة (سم): <input type="text" id="tileSizeCm" value="120x80"></label>
+                    <label>تداخل (سم): <input type="number" id="overlapCm" value="2"></label>
+                    <label>نص العلامة المائية: <input type="text" id="watermarkText" value="© PrintMaster Pro"></label>
+                    <button id="splitTilesBtn" class="btn-primary">🔪 تقسيم وتحميل ZIP</button>
+                </div>
+
+                <div class="param-group">
+                    <h3>✏️ أدوات الرسم على الصورة</h3>
+                    <button id="addArrowBtn" class="btn-secondary">➡️ إضافة سهم</button>
+                    <button id="addTextBtn" class="btn-secondary">🅃 إضافة نص</button>
+                    <button id="addCutMarkBtn" class="btn-secondary">✂️ إضافة هوامش قطع</button>
+                </div>
+
+                <!-- قسم حساب التكلفة المطور -->
+                <div class="param-group">
+                    <h3>💰 حساب تكلفة الطباعة</h3>
+                    <label>الدولة: <select id="countrySelect">
+                        <option value="مصر">مصر (EGP)</option><option value="السعودية">السعودية (SAR)</option>
+                        <option value="الإمارات">الإمارات (AED)</option><option value="الولايات المتحدة">الولايات المتحدة (USD)</option>
+                        <option value="أوروبا">أوروبا (EUR)</option>
+                    </select></label>
+                    <label>المادة: <select id="materialSelect">
+                        <option value="قماش">قماش</option><option value="فينيل">فينيل</option><option value="ورق">ورق</option>
+                    </select></label>
+                    <label>سعر المتر المربع للقماش: <input type="number" id="priceFabric" value="15" step="1"></label>
+                    <label>سعر المتر المربع للفينيل: <input type="number" id="priceVinyl" value="10" step="1"></label>
+                    <label>سعر المتر المربع للورق: <input type="number" id="pricePaper" value="8" step="1"></label>
+                    <label>التشطيب: <select id="finishSelect"><option value="لماع">لماع</option><option value="غير لامع">غير لامع</option></select></label>
+                    <label>المساحة (م²): <input type="number" id="area" value="1"></label>
+                    <button id="calcCostBtn" class="btn-primary">حساب التكلفة</button>
+                    <div id="costResult" class="badge"></div>
+                </div>
+
+                <div class="param-group">
+                    <h3>☁️ تكامل خدمات الطباعة</h3>
+                    <button id="sendToCloudBtn" class="btn-secondary">إرسال إلى API الطباعة</button>
+                </div>
+
+                <div class="param-group">
+                    <h3>📤 تصدير</h3>
+                    <button id="exportTIFFBtn" class="btn-secondary">TIFF</button>
+                    <button id="exportPDFBtn" class="btn-secondary">PDF</button>
+                    <button id="exportPNGBtn" class="btn-secondary">PNG</button>
+                    <button id="batchExportAllBtn" class="btn-primary">📦 تصدير الكل (ZIP)</button>
+                </div>
+
+                <div class="status" id="statusMsg">✅ النظام جاهز - جميع الميزات متاحة</div>
+            </div>
+        </div>
+        <div class="main-view">
+            <div class="toolbar">
+                <button id="removeBgBtn">🧠 إزالة الخلفية</button>
+                <button id="upscaleBtn">🔍 تكبير ذكي ×2</button>
+                <button id="denoiseAdvancedBtn">🌫️ تقليل التشويش</button>
+                <button id="deblockBtn">🧩 إزالة البكسلة</button>
+                <button id="sharpenProBtn">⚡ تحسين الحدة</button>
+                <button id="enhanceOverallBtn" class="btn-primary">✨ تحسين شامل</button>
+                <button id="cmykBtn">🎨 تحويل CMYK</button>
+                <button id="vectorizeSvgBtn">🖌️ تحويل إلى SVG</button>
+                <button id="resetBtn">↺ إعادة ضبط</button>
+            </div>
+            <div class="split-preview" id="splitPreview">
+                <div class="split-left"><h4>📸 قبل</h4><canvas id="beforeCanvas" width="500" height="400"></canvas></div>
+                <div class="split-divider" id="splitDivider"></div>
+                <div class="split-right"><h4>✨ بعد</h4><canvas id="afterCanvas" width="500" height="400"></canvas></div>
+            </div>
+            <div class="progress-container" id="progressContainer"><div class="progress-bar" id="progressBar"></div><span class="progress-text" id="progressText">0%</span></div>
+            <div id="gamutWarning" class="warning-badge"></div>
+            <div id="recommendations" class="recommendations-badge"></div>
+            <div id="svgPreviewContainer" style="display: none; margin-top: 1rem; background: var(--bg-sidebar); border-radius: 1rem; padding: 1rem;">
+                <h4>📐 معاينة SVG</h4>
+                <div id="svgPreview" style="max-height: 300px; overflow: auto;"></div>
+                <button id="downloadSvgBtn" class="btn-primary" style="margin-top: 0.5rem;">💾 تنزيل SVG</button>
+            </div>
+            <div class="status" id="statusMsgMain"></div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+    <script>
+        // إنشاء manifest.json و service worker ديناميكياً
+        (function() {
+            const manifest = {
+                name: "PrintMaster Pro",
+                short_name: "PrintMaster",
+                start_url: ".",
+                display: "standalone",
+                theme_color: "#ff8c42",
+                background_color: "#1e1f2c",
+                icons: [{ src: "https://via.placeholder.com/192", sizes: "192x192", type: "image/png" }]
+            };
+            const manifestBlob = new Blob([JSON.stringify(manifest)], {type: "application/json"});
+            const manifestURL = URL.createObjectURL(manifestBlob);
+            const link = document.querySelector('link[rel="manifest"]');
+            if(link) link.href = manifestURL;
+            
+            // Service worker بسيط
+            if('serviceWorker' in navigator) {
+                const swCode = `self.addEventListener('fetch', event => { event.respondWith(fetch(event.request)); });`;
+                const swBlob = new Blob([swCode], {type: 'application/javascript'});
+                const swURL = URL.createObjectURL(swBlob);
+                navigator.serviceWorker.register(swURL).then(reg => console.log("SW registered", reg)).catch(err => console.log("SW failed", err));
+            }
+        })();
+    </script>
+</body>
+</html>
